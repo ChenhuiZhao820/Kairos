@@ -1,0 +1,301 @@
+import React, { useState } from 'react';
+import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Plus, X } from 'lucide-react';
+
+const SchedulePlanner = () => {
+  const [events, setEvents] = useState([]);
+  const [newEvent, setNewEvent] = useState({
+    name: '',
+    size: 'trivial',
+    energy: '0',
+    timeWindow: 'anytime', // 新增时间窗口
+    afterMeal: false, // 是否需要在饭后
+  });
+  const [scheduledEvents, setScheduledEvents] = useState([]);
+  
+  const sizeMap = {
+    trivial: 15,
+    small: 30,
+    middle: 90,
+    large: 120
+  };
+  
+  const timeWindows = [
+    { value: 'anytime', label: '任意时间' },
+    { value: 'morning-meal', label: '早餐 (8:00-10:00)' },
+    { value: 'lunch-meal', label: '午餐 (12:00-14:00)' },
+    { value: 'dinner-meal', label: '晚餐 (18:00-20:00)' },
+    { value: 'morning', label: '上午 (8:00-12:00)' },
+    { value: 'afternoon', label: '下午 (14:00-18:00)' },
+    { value: 'evening', label: '晚上 (20:00-22:00)' }
+  ];
+
+  const sizeOptions = [
+    { value: 'trivial', label: '随时可插入 (15分钟)' },
+    { value: 'small', label: '小型 (30分钟)' },
+    { value: 'middle', label: '中型 (90分钟)' },
+    { value: 'large', label: '大型 (120分钟+)' }
+  ];
+  
+  const energyOptions = [
+    { value: '0', label: '无消耗' },
+    { value: '1', label: '低消耗' },
+    { value: '2', label: '中等消耗' },
+    { value: '3', label: '高消耗' }
+  ];
+
+  // 计算启动困难值
+  const calculateStartupDifficulty = (prevEnergy, nextEnergy) => {
+    const energyGap = nextEnergy - prevEnergy;
+    return energyGap > 1 ? energyGap - 1 : 0;
+  };
+
+  // 检查时间窗口是否合适
+  const isTimeWindowValid = (event, timeSlot) => {
+    if (event.timeWindow === 'anytime') return true;
+    
+    const hour = parseInt(timeSlot.split(':')[0]);
+    
+    switch (event.timeWindow) {
+      case 'morning-meal': return hour >= 8 && hour < 10;
+      case 'lunch-meal': return hour >= 12 && hour < 14;
+      case 'dinner-meal': return hour >= 18 && hour < 20;
+      case 'morning': return hour >= 8 && hour < 12;
+      case 'afternoon': return hour >= 14 && hour < 18;
+      case 'evening': return hour >= 20 && hour < 22;
+      default: return true;
+    }
+  };
+
+  const generateSchedule = () => {
+    let schedule = [];
+    let currentTime = 8 * 60; // 从早上8点开始
+    let remainingEnergy = 12;
+    let lastMealTime = null;
+    let lastEventEnergy = 0;
+    
+    // 首先安排固定时间的餐饭
+    const meals = events.filter(event => 
+      ['morning-meal', 'lunch-meal', 'dinner-meal'].includes(event.timeWindow)
+    );
+    
+    // 其他需要安排的事件
+    const flexibleEvents = events.filter(event => 
+      !['morning-meal', 'lunch-meal', 'dinner-meal'].includes(event.timeWindow)
+    );
+
+    // 按能量消耗和时间窗口排序
+    const sortedEvents = [...flexibleEvents].sort((a, b) => {
+      if (a.timeWindow === 'anytime' && b.timeWindow !== 'anytime') return 1;
+      if (a.timeWindow !== 'anytime' && b.timeWindow === 'anytime') return -1;
+      return parseInt(b.energy) - parseInt(a.energy);
+    });
+
+    while (currentTime < 22 * 60) { // 到晚上10点结束
+      const currentHour = Math.floor(currentTime / 60);
+      const timeSlot = `${currentHour}:${(currentTime % 60).toString().padStart(2, '0')}`;
+
+      // 检查是否需要安排餐食
+      const mealForThisTime = meals.find(meal => isTimeWindowValid(meal, timeSlot));
+      
+      if (mealForThisTime) {
+        schedule.push({
+          ...mealForThisTime,
+          startTime: timeSlot
+        });
+        lastMealTime = currentTime;
+        currentTime += sizeMap[mealForThisTime.size];
+        remainingEnergy -= parseInt(mealForThisTime.energy);
+        lastEventEnergy = parseInt(mealForThisTime.energy);
+        continue;
+      }
+
+      // 尝试安排其他事件
+      for (const event of sortedEvents) {
+        if (schedule.find(s => s.id === event.id)) continue;
+        
+        const eventTime = sizeMap[event.size];
+        const eventEnergy = parseInt(event.energy);
+        const startupDifficulty = calculateStartupDifficulty(lastEventEnergy, eventEnergy);
+        
+        // 检查各种约束
+        if (
+          remainingEnergy >= (eventEnergy + startupDifficulty) &&
+          isTimeWindowValid(event, timeSlot) &&
+          (!event.afterMeal || (lastMealTime && (currentTime - lastMealTime >= 60)))
+        ) {
+          schedule.push({
+            ...event,
+            startTime: timeSlot,
+            startupDifficulty: startupDifficulty
+          });
+          currentTime += eventTime;
+          remainingEnergy -= (eventEnergy + startupDifficulty);
+          lastEventEnergy = eventEnergy;
+          break;
+        }
+      }
+      
+      currentTime += 15; // 如果没有找到合适的事件，时间前进15分钟
+    }
+
+    setScheduledEvents(schedule);
+  };
+
+  const addEvent = () => {
+    if (newEvent.name.trim()) {
+      setEvents([...events, { ...newEvent, id: Date.now() }]);
+      setNewEvent({
+        name: '',
+        size: 'trivial',
+        energy: '0',
+        timeWindow: 'anytime',
+        afterMeal: false
+      });
+    }
+  };
+
+  const removeEvent = (id) => {
+    setEvents(events.filter(event => event.id !== id));
+  };
+
+  return (
+    <div className="w-full max-w-4xl mx-auto p-4">
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>添加新事件</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4">
+            <Input
+              placeholder="事件名称"
+              value={newEvent.name}
+              onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })}
+              className="flex-1"
+            />
+            <select
+              value={newEvent.size}
+              onChange={(e) => setNewEvent({ ...newEvent, size: e.target.value })}
+              className="border rounded p-2"
+            >
+              {sizeOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={newEvent.energy}
+              onChange={(e) => setNewEvent({ ...newEvent, energy: e.target.value })}
+              className="border rounded p-2"
+            >
+              {energyOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={newEvent.timeWindow}
+              onChange={(e) => setNewEvent({ ...newEvent, timeWindow: e.target.value })}
+              className="border rounded p-2"
+            >
+              {timeWindows.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={newEvent.afterMeal}
+                onChange={(e) => setNewEvent({ ...newEvent, afterMeal: e.target.checked })}
+              />
+              需要在饭后
+            </label>
+            <Button onClick={addEvent} className="flex items-center gap-2">
+              <Plus size={16} /> 添加
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>待安排事件列表</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {events.map(event => (
+              <div key={event.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                <span>{event.name}</span>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-600">
+                    {timeWindows.find(o => o.value === event.timeWindow)?.label}
+                  </span>
+                  <span className="text-sm text-gray-600">
+                    {sizeOptions.find(o => o.value === event.size)?.label}
+                  </span>
+                  <span className="text-sm text-gray-600">
+                    能量消耗: {event.energy}
+                  </span>
+                  {event.afterMeal && (
+                    <span className="text-sm text-gray-600">饭后进行</span>
+                  )}
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => removeEvent(event.id)}
+                  >
+                    <X size={16} />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {events.length > 0 && (
+            <Button 
+              onClick={generateSchedule}
+              className="mt-4"
+            >
+              生成日程安排
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {scheduledEvents.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>推荐日程安排</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {scheduledEvents.map((event, index) => (
+                <div key={event.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                  <span className="font-medium">
+                    {event.startTime} - {event.name}
+                  </span>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-gray-600">
+                      {sizeOptions.find(o => o.value === event.size)?.label}
+                    </span>
+                    <span className="text-sm text-gray-600">
+                      能量消耗: {event.energy}
+                      {event.startupDifficulty > 0 && ` (+${event.startupDifficulty}启动困难)`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+export default SchedulePlanner;
