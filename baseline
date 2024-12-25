@@ -4,16 +4,107 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, X } from 'lucide-react';
 
+const EnergyAssessment = ({ onComplete }) => {
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState({
+    sleepQuality: null,
+    morningFeeling: null,
+    workload: null,
+    importantTask: null
+  });
+
+  const questions = [
+    {
+      id: 'sleepQuality',
+      text: '昨晚的睡眠质量如何？',
+      options: [
+        { value: 3, text: '很好（7-8小时优质睡眠）' },
+        { value: 2, text: '一般（6-7小时睡眠）' },
+        { value: 1, text: '较差（睡眠不足或质量差）' }
+      ]
+    },
+    {
+      id: 'morningFeeling',
+      text: '早上起床时感觉如何？',
+      options: [
+        { value: 3, text: '精力充沛' },
+        { value: 2, text: '状态一般' },
+        { value: 1, text: '比较疲惫' }
+      ]
+    },
+    {
+      id: 'workload',
+      text: '今天的工作/学习压力如何？',
+      options: [
+        { value: 3, text: '压力较小' },
+        { value: 2, text: '压力适中' },
+        { value: 1, text: '压力较大' }
+      ]
+    },
+    {
+      id: 'importantTask',
+      text: '今天是否有重要任务？',
+      options: [
+        { value: 3, text: '没有特别重要的任务' },
+        { value: 2, text: '有一些重要事项，但不紧急' },
+        { value: 1, text: '有重要且紧急的任务' }
+      ]
+    }
+  ];
+
+  const handleAnswer = (questionId, value) => {
+    const newAnswers = {
+      ...answers,
+      [questionId]: value
+    };
+    setAnswers(newAnswers);
+    
+    if (step < questions.length - 1) {
+      setStep(step + 1);
+    } else {
+      // 计算建议的精力值
+      const total = Object.values(newAnswers).reduce((sum, val) => sum + (val || 0), 0);
+      const suggestedEnergy = Math.round(10 + (total / (questions.length * 3)) * 5);
+      onComplete(suggestedEnergy);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium">{questions[step].text}</h3>
+        <div className="space-y-2">
+          {questions[step].options.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => handleAnswer(questions[step].id, option.value)}
+              className="w-full text-left p-3 rounded border hover:bg-gray-50 transition-colors"
+            >
+              {option.text}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="text-sm text-gray-500">
+        问题 {step + 1} / {questions.length}
+      </div>
+    </div>
+  );
+};
+
 const SchedulePlanner = () => {
   const [events, setEvents] = useState([]);
   const [newEvent, setNewEvent] = useState({
     name: '',
     size: 'trivial',
     energy: '0',
-    timeWindow: 'anytime', // 新增时间窗口
-    afterMeal: false, // 是否需要在饭后
+    timeWindow: 'anytime',
+    afterMeal: false,
   });
   const [scheduledEvents, setScheduledEvents] = useState([]);
+  const [totalEnergy, setTotalEnergy] = useState(null);
+  const [showAssessment, setShowAssessment] = useState(true);
+  const [manualEnergyInput, setManualEnergyInput] = useState(false);
   
   const sizeMap = {
     trivial: 15,
@@ -24,18 +115,18 @@ const SchedulePlanner = () => {
   
   const timeWindows = [
     { value: 'anytime', label: '任意时间' },
-    { value: 'morning-meal', label: '早餐 (8:00-10:00)' },
-    { value: 'lunch-meal', label: '午餐 (12:00-14:00)' },
-    { value: 'dinner-meal', label: '晚餐 (18:00-20:00)' },
-    { value: 'morning', label: '上午 (8:00-12:00)' },
-    { value: 'afternoon', label: '下午 (14:00-18:00)' },
-    { value: 'evening', label: '晚上 (20:00-22:00)' }
+    { value: 'morning-meal', label: ' 8:00-10:00' },
+    { value: 'lunch-meal', label: '12:00-14:00' },
+    { value: 'dinner-meal', label: '18:00-20:00' },
+    { value: 'morning', label: '8:00-12:00' },
+    { value: 'afternoon', label: '14:00-18:00' },
+    { value: 'evening', label: '20:00-22:00' }
   ];
 
   const sizeOptions = [
-    { value: 'trivial', label: '随时可插入 (15分钟)' },
-    { value: 'small', label: '小型 (30分钟)' },
-    { value: 'middle', label: '中型 (90分钟)' },
+    { value: 'trivial', label: '随时可插入' },
+    { value: 'small', label: '小型 (<= 30分钟)' },
+    { value: 'middle', label: '中型 (<= 120分钟)' },
     { value: 'large', label: '大型 (120分钟+)' }
   ];
   
@@ -46,13 +137,22 @@ const SchedulePlanner = () => {
     { value: '3', label: '高消耗' }
   ];
 
-  // 计算启动困难值
+  const handleEnergyAssessmentComplete = (suggestedEnergy) => {
+    setTotalEnergy(suggestedEnergy);
+    setShowAssessment(false);
+  };
+
+  const handleManualEnergyInput = (value) => {
+    const energy = Math.max(10, Math.min(15, parseInt(value) || 13));
+    setTotalEnergy(energy);
+    setShowAssessment(false);
+  };
+
   const calculateStartupDifficulty = (prevEnergy, nextEnergy) => {
     const energyGap = nextEnergy - prevEnergy;
     return energyGap > 1 ? energyGap - 1 : 0;
   };
 
-  // 检查时间窗口是否合适
   const isTimeWindowValid = (event, timeSlot) => {
     if (event.timeWindow === 'anytime') return true;
     
@@ -72,7 +172,7 @@ const SchedulePlanner = () => {
   const generateSchedule = () => {
     let schedule = [];
     let currentTime = 8 * 60; // 从早上8点开始
-    let remainingEnergy = 12;
+    let remainingEnergy = totalEnergy;
     let lastMealTime = null;
     let lastEventEnergy = 0;
     
@@ -120,7 +220,6 @@ const SchedulePlanner = () => {
         const eventEnergy = parseInt(event.energy);
         const startupDifficulty = calculateStartupDifficulty(lastEventEnergy, eventEnergy);
         
-        // 检查各种约束
         if (
           remainingEnergy >= (eventEnergy + startupDifficulty) &&
           isTimeWindowValid(event, timeSlot) &&
@@ -138,7 +237,7 @@ const SchedulePlanner = () => {
         }
       }
       
-      currentTime += 15; // 如果没有找到合适的事件，时间前进15分钟
+      currentTime += 15;
     }
 
     setScheduledEvents(schedule);
@@ -161,11 +260,68 @@ const SchedulePlanner = () => {
     setEvents(events.filter(event => event.id !== id));
   };
 
+  if (showAssessment) {
+    return (
+      <div className="w-full max-w-4xl mx-auto p-4">
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>设置今日精力值</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex gap-4 items-center">
+                <Button
+                  onClick={() => setManualEnergyInput(!manualEnergyInput)}
+                  variant="outline"
+                >
+                  {manualEnergyInput ? '使用精力评估' : '手动设置精力值'}
+                </Button>
+              </div>
+              
+              {manualEnergyInput ? (
+                <div className="space-y-2">
+                  <p className="text-gray-600">请输入您估计的今日精力值 (10-15)：</p>
+                  <div className="flex gap-4">
+                    <Input
+                      type="number"
+                      min="10"
+                      max="15"
+                      defaultValue="13"
+                      onChange={(e) => handleManualEnergyInput(e.target.value)}
+                      className="w-32"
+                    />
+                    <Button onClick={() => setShowAssessment(false)}>
+                      确认
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <EnergyAssessment onComplete={handleEnergyAssessmentComplete} />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-4xl mx-auto p-4">
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>添加新事件</CardTitle>
+          <CardTitle className="flex justify-between items-center">
+            <span>今日规划</span>
+            <div className="text-sm font-normal flex items-center gap-4">
+              <span>剩余精力值: {totalEnergy}</span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowAssessment(true)}
+              >
+                重新评估
+              </Button>
+            </div>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-4">
@@ -295,6 +451,10 @@ const SchedulePlanner = () => {
         </Card>
       )}
     </div>
+  );
+};
+
+export default SchedulePlanner;
   );
 };
 
