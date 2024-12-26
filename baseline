@@ -1,31 +1,127 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Settings, AlertTriangle } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
-const EnergyAssessment = ({ onComplete }) => {
-  const [step, setStep] = useState(0);
+// Default task tags with their properties
+const DEFAULT_TASKS = {
+  'main-work': { size: 'quartz', energy: 'exhaustive', enjoyment: 0, label: '主业工作任务' },
+  'side-work': { size: 'quartz', energy: 'exhaustive', enjoyment: 1, label: '副业工作任务' },
+  'personal-study': { size: 'quartz', energy: 'exhaustive', enjoyment: 2, label: '个人提升学习任务' },
+  'school-study': { size: 'quartz', energy: 'exhaustive', enjoyment: 1, label: '学校学习任务' },
+  'hospital': { size: 'pebble', energy: 'mild', enjoyment: 0, label: '去医院' },
+  'walk': { size: 'pebble', energy: 'minor', enjoyment: 2, label: '散步' },
+  'meal': { size: 'sand', energy: 'minor', enjoyment: 2, label: '吃饭' },
+  'shower': { size: 'sand', energy: 'minor', enjoyment: 1, label: '洗澡' },
+  'exercise': { size: 'quartz', energy: 'exhaustive', enjoyment: 2, label: '运动' },
+  'social-media': { size: 'sand', energy: 'negligible', enjoyment: 2, label: '刷社交媒体' },
+  'hobby': { size: 'pebble', energy: 'mild', enjoyment: 3, label: '爱好' },
+  'nap': { size: 'sand', energy: 'negligible', enjoyment: 3, label: '小憩' }
+};
+
+const SIZE_MAP = {
+  boulder: { minutes: 240, label: 'Boulder (4小时+)' },
+  quartz: { minutes: 120, label: 'Quartz (2-4小时)' },
+  pebble: { minutes: 60, label: 'Pebble (≤2小时)' },
+  sand: { minutes: 15, label: 'Sand (≤15分钟)' }
+};
+
+const ENERGY_MAP = {
+  exhaustive: { value: 3, label: '消耗大' },
+  mild: { value: 2, label: '消耗中等' },
+  minor: { value: 1, label: '消耗小' },
+  negligible: { value: 0, label: '几乎无消耗' }
+};
+
+// Initial Questionnaire Component
+const InitialQuestionnaire = ({ onComplete }) => {
   const [answers, setAnswers] = useState({
-    sleepQuality: null,
+    hasDisability: null,
+    hasMenstruation: null
+  });
+
+  const handleSubmit = () => {
+    if (answers.hasDisability !== null && answers.hasMenstruation !== null) {
+      onComplete(answers);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>初始设置问卷</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <p>是否有disability可能影响精力的考虑？</p>
+          <div className="flex gap-4 mt-2">
+            <Button
+              variant={answers.hasDisability === true ? "default" : "outline"}
+              onClick={() => setAnswers({ ...answers, hasDisability: true })}
+            >
+              是
+            </Button>
+            <Button
+              variant={answers.hasDisability === false ? "default" : "outline"}
+              onClick={() => setAnswers({ ...answers, hasDisability: false })}
+            >
+              否
+            </Button>
+          </div>
+        </div>
+
+        <div>
+          <p>是否有月经影响精力的考虑？</p>
+          <div className="flex gap-4 mt-2">
+            <Button
+              variant={answers.hasMenstruation === true ? "default" : "outline"}
+              onClick={() => setAnswers({ ...answers, hasMenstruation: true })}
+            >
+              是
+            </Button>
+            <Button
+              variant={answers.hasMenstruation === false ? "default" : "outline"}
+              onClick={() => setAnswers({ ...answers, hasMenstruation: false })}
+            >
+              否
+            </Button>
+          </div>
+        </div>
+
+        {(answers.hasDisability !== null && answers.hasMenstruation !== null) && (
+          <Button onClick={handleSubmit}>确认</Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+// Modified Energy Assessment Component
+const EnergyAssessment = ({ userProfile, onComplete }) => {
+  const [answers, setAnswers] = useState({
+    restQuality: null,
     morningFeeling: null,
     workload: null,
-    importantTask: null
+    hasImportantTask: null,
+    conditionImpact: userProfile.needsConditionAssessment ? null : 0
   });
 
   const questions = [
     {
-      id: 'sleepQuality',
-      text: '昨晚的睡眠质量如何？',
+      id: 'restQuality',
+      text: '在上一个精力周期结尾你是否得到了充分休息？',
       options: [
-        { value: 3, text: '很好（7-8小时优质睡眠）' },
-        { value: 2, text: '一般（6-7小时睡眠）' },
-        { value: 1, text: '较差（睡眠不足或质量差）' }
+        { value: 3, text: '是，休息充分' },
+        { value: 2, text: '一般' },
+        { value: 1, text: '否，休息不足' }
       ]
     },
     {
       id: 'morningFeeling',
-      text: '早上起床时感觉如何？',
+      text: '本个精力周期开始时的状态如何？',
       options: [
         { value: 3, text: '精力充沛' },
         { value: 2, text: '状态一般' },
@@ -34,7 +130,7 @@ const EnergyAssessment = ({ onComplete }) => {
     },
     {
       id: 'workload',
-      text: '今天的工作/学习压力如何？',
+      text: '本个精力周期的工作/学习压力如何？',
       options: [
         { value: 3, text: '压力较小' },
         { value: 2, text: '压力适中' },
@@ -42,420 +138,497 @@ const EnergyAssessment = ({ onComplete }) => {
       ]
     },
     {
-      id: 'importantTask',
-      text: '今天是否有重要任务？',
+      id: 'hasImportantTask',
+      text: '本个精力周期是否有重要任务？',
       options: [
-        { value: 3, text: '没有特别重要的任务' },
-        { value: 2, text: '有一些重要事项，但不紧急' },
-        { value: 1, text: '有重要且紧急的任务' }
+        { value: true, text: '是' },
+        { value: false, text: '否' }
       ]
     }
   ];
 
+  if (userProfile.needsConditionAssessment) {
+    questions.push({
+      id: 'conditionImpact',
+      text: '身体状况对精力的影响程度如何？',
+      options: [
+        { value: 0, text: '几乎没有影响' },
+        { value: -1, text: '轻微影响' },
+        { value: -2, text: '中度影响' },
+        { value: -3, text: '严重影响' }
+      ]
+    });
+  }
+
   const handleAnswer = (questionId, value) => {
-    const newAnswers = {
-      ...answers,
-      [questionId]: value
-    };
+    const newAnswers = { ...answers, [questionId]: value };
     setAnswers(newAnswers);
-    
-    if (step < questions.length - 1) {
-      setStep(step + 1);
-    } else {
-      // 计算建议的精力值
-      const total = Object.values(newAnswers).reduce((sum, val) => sum + (val || 0), 0);
-      const suggestedEnergy = Math.round(10 + (total / (questions.length * 3)) * 5);
-      onComplete(suggestedEnergy);
+
+    // Check if all questions are answered
+    if (Object.values(newAnswers).every(v => v !== null)) {
+      // Calculate suggested energy
+      let baseEnergy = 13; // Base energy level
+      const conditionImpact = newAnswers.conditionImpact || 0;
+      
+      // Adjust based on answers
+      const energyFactors = [
+        newAnswers.restQuality,
+        newAnswers.morningFeeling,
+        newAnswers.workload
+      ];
+      
+      const averageScore = energyFactors.reduce((sum, val) => sum + val, 0) / energyFactors.length;
+      const adjustedEnergy = Math.round(baseEnergy + (averageScore - 2) + conditionImpact);
+      
+      // Ensure energy stays within bounds
+      const finalEnergy = Math.max(10, Math.min(15, adjustedEnergy));
+      
+      onComplete({
+        energy: finalEnergy,
+        hasImportantTask: newAnswers.hasImportantTask
+      });
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium">{questions[step].text}</h3>
-        <div className="space-y-2">
-          {questions[step].options.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handleAnswer(questions[step].id, option.value)}
-              className="w-full text-left p-3 rounded border hover:bg-gray-50 transition-colors"
-            >
-              {option.text}
-            </button>
-          ))}
+      {questions.map((question, index) => (
+        <div key={question.id} className="space-y-4">
+          <h3 className="text-lg font-medium">{question.text}</h3>
+          <div className="space-y-2">
+            {question.options.map(option => (
+              <button
+                key={option.value}
+                onClick={() => handleAnswer(question.id, option.value)}
+                className={`w-full text-left p-3 rounded border transition-colors ${
+                  answers[question.id] === option.value 
+                    ? 'bg-blue-50 border-blue-500' 
+                    : 'hover:bg-gray-50'
+                }`}
+              >
+                {option.text}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="text-sm text-gray-500">
-        问题 {step + 1} / {questions.length}
-      </div>
+      ))}
     </div>
   );
 };
 
-const SchedulePlanner = () => {
-  const [events, setEvents] = useState([]);
-  const [newEvent, setNewEvent] = useState({
-    name: '',
-    size: 'trivial',
-    energy: '0',
-    timeWindow: 'anytime',
-    afterMeal: false,
-  });
-  const [scheduledEvents, setScheduledEvents] = useState([]);
-  const [totalEnergy, setTotalEnergy] = useState(null);
-  const [showAssessment, setShowAssessment] = useState(true);
-  const [manualEnergyInput, setManualEnergyInput] = useState(false);
-  
-  const sizeMap = {
-    trivial: 15,
-    small: 30,
-    middle: 90,
-    large: 120
-  };
-  
-  const timeWindows = [
-    { value: 'anytime', label: '任意时间' },
-    { value: 'morning-meal', label: ' 8:00-10:00' },
-    { value: 'lunch-meal', label: '12:00-14:00' },
-    { value: 'dinner-meal', label: '18:00-20:00' },
-    { value: 'morning', label: '8:00-12:00' },
-    { value: 'afternoon', label: '14:00-18:00' },
-    { value: 'evening', label: '20:00-22:00' }
-  ];
+// User History Component
+const UserHistory = ({ history, onUpdateTask }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
 
-  const sizeOptions = [
-    { value: 'trivial', label: '随时可插入' },
-    { value: 'small', label: '小型 (<= 30分钟)' },
-    { value: 'middle', label: '中型 (<= 120分钟)' },
-    { value: 'large', label: '大型 (120分钟+)' }
-  ];
-  
-  const energyOptions = [
-    { value: '0', label: '无消耗' },
-    { value: '1', label: '低消耗' },
-    { value: '2', label: '中等消耗' },
-    { value: '3', label: '高消耗' }
-  ];
-
-  const handleEnergyAssessmentComplete = (suggestedEnergy) => {
-    setTotalEnergy(suggestedEnergy);
-    setShowAssessment(false);
+  const handleEditTask = (task) => {
+    setEditingTask(task);
   };
 
-  const handleManualEnergyInput = (value) => {
-    const energy = Math.max(10, Math.min(15, parseInt(value) || 13));
-    setTotalEnergy(energy);
-    setShowAssessment(false);
-  };
-
-  const calculateStartupDifficulty = (prevEnergy, nextEnergy) => {
-    const energyGap = nextEnergy - prevEnergy;
-    return energyGap > 1 ? energyGap - 1 : 0;
-  };
-
-  const isTimeWindowValid = (event, timeSlot) => {
-    if (event.timeWindow === 'anytime') return true;
-    
-    const hour = parseInt(timeSlot.split(':')[0]);
-    
-    switch (event.timeWindow) {
-      case 'morning-meal': return hour >= 8 && hour < 10;
-      case 'lunch-meal': return hour >= 12 && hour < 14;
-      case 'dinner-meal': return hour >= 18 && hour < 20;
-      case 'morning': return hour >= 8 && hour < 12;
-      case 'afternoon': return hour >= 14 && hour < 18;
-      case 'evening': return hour >= 20 && hour < 22;
-      default: return true;
+  const handleSaveTask = () => {
+    if (editingTask) {
+      onUpdateTask(editingTask);
+      setEditingTask(null);
     }
   };
 
-  const generateSchedule = () => {
+  return (
+    <>
+      <Button onClick={() => setIsOpen(true)}>
+        <Settings className="mr-2 h-4 w-4" /> 历史记录
+      </Button>
+
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>任务历史记录</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {Object.entries(history).map(([taskId, task]) => (
+              <div key={taskId} className="flex items-center justify-between p-2 border rounded">
+                {editingTask?.id === taskId ? (
+                  <div className="flex items-center gap-4 w-full">
+                    <Input
+                      value={editingTask.name}
+                      onChange={(e) => setEditingTask({
+                        ...editingTask,
+                        name: e.target.value
+                      })}
+                    />
+                    <select
+                      value={editingTask.energy}
+                      onChange={(e) => setEditingTask({
+                        ...editingTask,
+                        energy: e.target.value
+                      })}
+                      className="border rounded p-2"
+                    >
+                      {Object.entries(ENERGY_MAP).map(([key, { label }]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={editingTask.size}
+                      onChange={(e) => setEditingTask({
+                        ...editingTask,
+                        size: e.target.value
+                      })}
+                      className="border rounded p-2"
+                    >
+                      {Object.entries(SIZE_MAP).map(([key, { label }]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                    <Button onClick={handleSaveTask}>保存</Button>
+                  </div>
+                ) : (
+                  <>
+                    <span>{task.name}</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm text-gray-600">
+                        {SIZE_MAP[task.size].label}
+                      </span>
+                      <span className="text-sm text-gray-600">
+                        {ENERGY_MAP[task.energy].label}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditTask({ id: taskId, ...task })}
+                      >
+                        编辑
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
+
+const SchedulePlanner = ({ initialEnergy, hasImportantTask, onUpdateUserHistory }) => {
+  const [events, setEvents] = useState([]);
+  const [newCustomEvent, setNewCustomEvent] = useState({
+    name: '',
+    size: 'sand',
+    energy: 'negligible',
+    enjoyment: 0,
+    timeWindow: 'anytime'
+  });
+  const [scheduledEvents, setScheduledEvents] = useState([]);
+  const [remainingEnergy, setRemainingEnergy] = useState(initialEnergy);
+  const [showNudgeDialog, setShowNudgeDialog] = useState(false);
+  const [currentNudge, setCurrentNudge] = useState(null);
+  const [showOverloadDialog, setShowOverloadDialog] = useState(false);
+  const [overloadEvent, setOverloadEvent] = useState(null);
+
+  // 获取可用的任务标签
+  const getAvailableTasks = () => {
+    const importantTasks = ['main-work', 'side-work', 'school-study'];
+    const regularTasks = ['exercise', 'personal-study', 'hobby'];
+    const alwaysAvailable = ['meal', 'shower', 'nap'];
+
+    const availableTasks = [...alwaysAvailable];
+    if (hasImportantTask) {
+      availableTasks.push(...importantTasks);
+    } else {
+      availableTasks.push(...regularTasks);
+    }
+
+    return availableTasks.reduce((acc, key) => {
+      acc[key] = DEFAULT_TASKS[key];
+      return acc;
+    }, {});
+  };
+
+  // 检查启动困难
+  const checkStartupDifficulty = (prevEvent, nextEvent) => {
+    if (!prevEvent || !nextEvent) return false;
+
+    const energyGap = ENERGY_MAP[nextEvent.energy].value - ENERGY_MAP[prevEvent.energy].value;
+    const enjoymentGap = nextEvent.enjoyment - prevEvent.enjoyment;
+
+    return energyGap <= -2 || enjoymentGap >= 2;
+  };
+
+  // 处理Overload
+  const handleOverload = (event) => {
+    setOverloadEvent(event);
+    setShowOverloadDialog(true);
+  };
+
+  const handleOverloadConfirm = (permanent) => {
+    const updatedEvents = events.map(e => {
+      if (e.id === overloadEvent.id) {
+        const newEvent = {
+          ...e,
+          energy: ENERGY_MAP[e.energy].value + 1
+        };
+        if (permanent) {
+          onUpdateUserHistory(newEvent);
+        }
+        return newEvent;
+      }
+      return e;
+    });
+    setEvents(updatedEvents);
+    generateSchedule(updatedEvents);
+    setShowOverloadDialog(false);
+  };
+
+  // 处理Nudge
+  const handleNudge = (prevEvent, nextEvent) => {
+    setCurrentNudge({ prevEvent, nextEvent });
+    setShowNudgeDialog(true);
+  };
+
+  const findCompatibleTasks = (event) => {
+    return Object.entries(DEFAULT_TASKS)
+      .filter(([_, task]) => (
+        task.enjoyment > event.enjoyment &&
+        task.size === 'sand' &&
+        ENERGY_MAP[task.energy].value <= 1
+      ))
+      .map(([id, task]) => ({
+        id,
+        ...task
+      }));
+  };
+
+  // 生成日程安排
+  const generateSchedule = (currentEvents = events) => {
     let schedule = [];
     let currentTime = 8 * 60; // 从早上8点开始
-    let remainingEnergy = totalEnergy;
-    let lastMealTime = null;
-    let lastEventEnergy = 0;
-    
-    // 首先安排固定时间的餐饭
-    const meals = events.filter(event => 
-      ['morning-meal', 'lunch-meal', 'dinner-meal'].includes(event.timeWindow)
-    );
-    
-    // 其他需要安排的事件
-    const flexibleEvents = events.filter(event => 
-      !['morning-meal', 'lunch-meal', 'dinner-meal'].includes(event.timeWindow)
-    );
+    let energy = remainingEnergy;
+    let lastEvent = null;
 
-    // 按能量消耗和时间窗口排序
-    const sortedEvents = [...flexibleEvents].sort((a, b) => {
+    const sortedEvents = [...currentEvents].sort((a, b) => {
       if (a.timeWindow === 'anytime' && b.timeWindow !== 'anytime') return 1;
       if (a.timeWindow !== 'anytime' && b.timeWindow === 'anytime') return -1;
-      return parseInt(b.energy) - parseInt(a.energy);
+      return ENERGY_MAP[b.energy].value - ENERGY_MAP[a.energy].value;
     });
 
-    while (currentTime < 22 * 60) { // 到晚上10点结束
-      const currentHour = Math.floor(currentTime / 60);
-      const timeSlot = `${currentHour}:${(currentTime % 60).toString().padStart(2, '0')}`;
+    while (currentTime < 22 * 60 && sortedEvents.length > 0) { // 到晚上10点结束
+      const event = sortedEvents[0];
+      const eventTime = SIZE_MAP[event.size].minutes;
+      const eventEnergy = ENERGY_MAP[event.energy].value;
 
-      // 检查是否需要安排餐食
-      const mealForThisTime = meals.find(meal => isTimeWindowValid(meal, timeSlot));
-      
-      if (mealForThisTime) {
-        schedule.push({
-          ...mealForThisTime,
-          startTime: timeSlot
-        });
-        lastMealTime = currentTime;
-        currentTime += sizeMap[mealForThisTime.size];
-        remainingEnergy -= parseInt(mealForThisTime.energy);
-        lastEventEnergy = parseInt(mealForThisTime.energy);
-        continue;
-      }
-
-      // 尝试安排其他事件
-      for (const event of sortedEvents) {
-        if (schedule.find(s => s.id === event.id)) continue;
-        
-        const eventTime = sizeMap[event.size];
-        const eventEnergy = parseInt(event.energy);
-        const startupDifficulty = calculateStartupDifficulty(lastEventEnergy, eventEnergy);
-        
-        if (
-          remainingEnergy >= (eventEnergy + startupDifficulty) &&
-          isTimeWindowValid(event, timeSlot) &&
-          (!event.afterMeal || (lastMealTime && (currentTime - lastMealTime >= 60)))
-        ) {
-          schedule.push({
-            ...event,
-            startTime: timeSlot,
-            startupDifficulty: startupDifficulty
-          });
-          currentTime += eventTime;
-          remainingEnergy -= (eventEnergy + startupDifficulty);
-          lastEventEnergy = eventEnergy;
-          break;
+      if (energy >= eventEnergy) {
+        if (lastEvent && checkStartupDifficulty(lastEvent, event)) {
+          handleNudge(lastEvent, event);
         }
+
+        const scheduledEvent = {
+          ...event,
+          startTime: `${Math.floor(currentTime / 60)}:${(currentTime % 60).toString().padStart(2, '0')}`,
+          endTime: `${Math.floor((currentTime + eventTime) / 60)}:${((currentTime + eventTime) % 60).toString().padStart(2, '0')}`
+        };
+
+        schedule.push(scheduledEvent);
+        currentTime += eventTime;
+        energy -= eventEnergy;
+        lastEvent = event;
+        sortedEvents.shift();
+      } else {
+        break;
       }
-      
-      currentTime += 15;
     }
 
     setScheduledEvents(schedule);
+    setRemainingEnergy(energy);
   };
 
-  const addEvent = () => {
-    if (newEvent.name.trim()) {
-      setEvents([...events, { ...newEvent, id: Date.now() }]);
-      setNewEvent({
+  // 添加事件
+  const addEvent = (taskId) => {
+    const task = DEFAULT_TASKS[taskId];
+    if (task) {
+      const newEvent = {
+        id: Date.now(),
+        ...task,
+        originalTaskId: taskId
+      };
+      setEvents([...events, newEvent]);
+    }
+  };
+
+  // 添加自定义事件
+  const addCustomEvent = () => {
+    if (newCustomEvent.name.trim()) {
+      const newEvent = {
+        id: Date.now(),
+        ...newCustomEvent
+      };
+      setEvents([...events, newEvent]);
+      setNewCustomEvent({
         name: '',
-        size: 'trivial',
-        energy: '0',
-        timeWindow: 'anytime',
-        afterMeal: false
+        size: 'sand',
+        energy: 'negligible',
+        enjoyment: 0,
+        timeWindow: 'anytime'
       });
     }
   };
 
-  const removeEvent = (id) => {
-    setEvents(events.filter(event => event.id !== id));
-  };
-
-  if (showAssessment) {
-    return (
-      <div className="w-full max-w-4xl mx-auto p-4">
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>设置今日精力值</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex gap-4 items-center">
-                <Button
-                  onClick={() => setManualEnergyInput(!manualEnergyInput)}
-                  variant="outline"
-                >
-                  {manualEnergyInput ? '使用精力评估' : '手动设置精力值'}
-                </Button>
-              </div>
-              
-              {manualEnergyInput ? (
-                <div className="space-y-2">
-                  <p className="text-gray-600">请输入您估计的今日精力值 (10-15)：</p>
-                  <div className="flex gap-4">
-                    <Input
-                      type="number"
-                      min="10"
-                      max="15"
-                      defaultValue="13"
-                      onChange={(e) => handleManualEnergyInput(e.target.value)}
-                      className="w-32"
-                    />
-                    <Button onClick={() => setShowAssessment(false)}>
-                      确认
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <EnergyAssessment onComplete={handleEnergyAssessmentComplete} />
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="w-full max-w-4xl mx-auto p-4">
-      <Card className="mb-6">
+    <div className="w-full max-w-4xl mx-auto p-4 space-y-6">
+      <Card>
         <CardHeader>
           <CardTitle className="flex justify-between items-center">
-            <span>今日规划</span>
-            <div className="text-sm font-normal flex items-center gap-4">
-              <span>剩余精力值: {totalEnergy}</span>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowAssessment(true)}
-              >
-                重新评估
-              </Button>
-            </div>
+            <span>精力周期规划</span>
+            <span className="text-sm font-normal">
+              剩余精力值: {remainingEnergy}
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-4">
-            <Input
-              placeholder="事件名称"
-              value={newEvent.name}
-              onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })}
-              className="flex-1"
-            />
-            <select
-              value={newEvent.size}
-              onChange={(e) => setNewEvent({ ...newEvent, size: e.target.value })}
-              className="border rounded p-2"
-            >
-              {sizeOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={newEvent.energy}
-              onChange={(e) => setNewEvent({ ...newEvent, energy: e.target.value })}
-              className="border rounded p-2"
-            >
-              {energyOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={newEvent.timeWindow}
-              onChange={(e) => setNewEvent({ ...newEvent, timeWindow: e.target.value })}
-              className="border rounded p-2"
-            >
-              {timeWindows.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={newEvent.afterMeal}
-                onChange={(e) => setNewEvent({ ...newEvent, afterMeal: e.target.checked })}
-              />
-              需要在饭后
-            </label>
-            <Button onClick={addEvent} className="flex items-center gap-2">
-              <Plus size={16} /> 添加
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>待安排事件列表</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {events.map(event => (
-              <div key={event.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                <span>{event.name}</span>
-                <div className="flex items-center gap-4">
-                  <span className="text-sm text-gray-600">
-                    {timeWindows.find(o => o.value === event.timeWindow)?.label}
-                  </span>
-                  <span className="text-sm text-gray-600">
-                    {sizeOptions.find(o => o.value === event.size)?.label}
-                  </span>
-                  <span className="text-sm text-gray-600">
-                    能量消耗: {event.energy}
-                  </span>
-                  {event.afterMeal && (
-                    <span className="text-sm text-gray-600">饭后进行</span>
-                  )}
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={() => removeEvent(event.id)}
+          <div className="space-y-6">
+            {/* 预设任务标签 */}
+            <div>
+              <h3 className="text-lg font-medium mb-4">可用任务标签</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {Object.entries(getAvailableTasks()).map(([id, task]) => (
+                  <Button
+                    key={id}
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => addEvent(id)}
                   >
-                    <X size={16} />
+                    <span>{task.label}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* 自定义任务输入 */}
+            <div>
+              <h3 className="text-lg font-medium mb-4">添加自定义任务</h3>
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  placeholder="任务名称"
+                  value={newCustomEvent.name}
+                  onChange={(e) => setNewCustomEvent({
+                    ...newCustomEvent,
+                    name: e.target.value
+                  })}
+                  className="flex-1"
+                />
+                <select
+                  value={newCustomEvent.size}
+                  onChange={(e) => setNewCustomEvent({
+                    ...newCustomEvent,
+                    size: e.target.value
+                  })}
+                  className="border rounded p-2"
+                >
+                  {Object.entries(SIZE_MAP).map(([key, { label }]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+                <select
+                  value={newCustomEvent.energy}
+                  onChange={(e) => setNewCustomEvent({
+                    ...newCustomEvent,
+                    energy: e.target.value
+                  })}
+                  className="border rounded p-2"
+                >
+                  {Object.entries(ENERGY_MAP).map(([key, { label }]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+                <Button onClick={addCustomEvent}>
+                  <Plus className="mr-2 h-4 w-4" /> 添加
+                </Button>
+              </div>
+            </div>
+
+            {/* 已添加的事件列表 */}
+            {events.length > 0 && (
+              <div>
+                <h3 className="text-lg font-medium mb-4">待安排事件</h3>
+                <div className="space-y-2">
+                  {events.map(event => (
+                    <div key={event.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <span>{event.name || DEFAULT_TASKS[event.originalTaskId]?.label}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">
+                          {SIZE_MAP[event.size].label}
+                        </span>
+                        <span className="text-sm text-gray-600">
+                          {ENERGY_MAP[event.energy].label}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOverload(event)}
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEvents(events.filter(e => e.id !== event.id))}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  <Button onClick={() => generateSchedule()} className="w-full mt-4">
+                    生成日程安排
                   </Button>
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* 生成的日程安排 */}
+            {scheduledEvents.length > 0 && (
+              <div>
+                <h3 className="text-lg font-medium mb-4">推荐日程安排</h3>
+                <div className="space-y-2">
+                  {scheduledEvents.map((event, index) => (
+                    <div key={event.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <span>
+                        {event.startTime} - {event.endTime} {event.name || DEFAULT_TASKS[event.originalTaskId]?.label}
+                      </span>
+                      <span className="text-sm text-gray-600">
+                        消耗精力: {ENERGY_MAP[event.energy].value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          {events.length > 0 && (
-            <Button 
-              onClick={generateSchedule}
-              className="mt-4"
-            >
-              生成日程安排
-            </Button>
-          )}
         </CardContent>
       </Card>
 
-      {scheduledEvents.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>推荐日程安排</CardTitle>
-          </CardHeader>
-          <CardContent>
+      {/* Nudge Dialog */}
+      <Dialog open={showNudgeDialog} onOpenChange={setShowNudgeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>任务转换提醒</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>检测到任务转换可能存在困难，是否：</p>
             <div className="space-y-2">
-              {scheduledEvents.map((event, index) => (
-                <div key={event.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                  <span className="font-medium">
-                    {event.startTime} - {event.name}
-                  </span>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600">
-                      {sizeOptions.find(o => o.value === event.size)?.label}
-                    </span>
-                    <span className="text-sm text-gray-600">
-                      能量消耗: {event.energy}
-                      {event.startupDifficulty > 0 && ` (+${event.startupDifficulty}启动困难)`}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
-};
-
-export default SchedulePlanner;
-  );
-};
+              <Button
+                onClick={() => {
+                  // 实现事件交换逻辑
+                  setShowNudgeDialog(false);
+                }}
+                className="w-full"
+              >
+                交换任务顺序
+              </Button>
+              <Button
+                onClick={() => {
+                  // 显示兼容任务
+                  const compatibleTasks = findCompatibleTasks(currentNudge?.nextEvent);
+                  // 实现选择兼容任务的逻辑
 
 export default SchedulePlanner;
