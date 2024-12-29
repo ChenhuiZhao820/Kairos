@@ -473,7 +473,44 @@ const SchedulePlanner = ({ initialEnergy, hasImportantTask, onUpdateUserHistory 
     }
   };
 
+  // 添加处理兼容任务选择的逻辑
+  const handleCompatibleTaskSelect = (taskId) => {
+    const compatibleTask = DEFAULT_TASKS[taskId];
+    if (compatibleTask) {
+      const updatedEvents = events.map(event => {
+        if (event.id === currentNudge?.nextEvent.id) {
+          return {
+            ...event,
+            ...compatibleTask,
+            id: event.id
+          };
+        }
+        return event;
+      });
+      setEvents(updatedEvents);
+      generateSchedule(updatedEvents);
+    }
+    setShowNudgeDialog(false);
+  };
+
+  // 添加任务交换的逻辑
+  const handleSwapTasks = () => {
+    if (currentNudge) {
+      const { prevEvent, nextEvent } = currentNudge;
+      const updatedEvents = events.map(event => {
+        if (event.id === prevEvent.id) return { ...nextEvent, id: prevEvent.id };
+        if (event.id === nextEvent.id) return { ...prevEvent, id: nextEvent.id };
+        return event;
+      });
+      setEvents(updatedEvents);
+      generateSchedule(updatedEvents);
+    }
+    setShowNudgeDialog(false);
+  };
+
   return (
+    <div className="w-full max-w-4xl mx-auto p-4 space-y-6">
+       return (
     <div className="w-full max-w-4xl mx-auto p-4 space-y-6">
       <Card>
         <CardHeader>
@@ -607,28 +644,77 @@ const SchedulePlanner = ({ initialEnergy, hasImportantTask, onUpdateUserHistory 
         </CardContent>
       </Card>
 
-      {/* Nudge Dialog */}
+      {/* 完善的Nudge Dialog */}
       <Dialog open={showNudgeDialog} onOpenChange={setShowNudgeDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>任务转换提醒</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <p>检测到任务转换可能存在困难，是否：</p>
+            <p>检测到任务转换可能存在困难，建议：</p>
             <div className="space-y-2">
               <Button
-                onClick={() => {
-                  // 实现事件交换逻辑
-                  setShowNudgeDialog(false);
-                }}
+                onClick={handleSwapTasks}
                 className="w-full"
               >
                 交换任务顺序
               </Button>
+              <div className="space-y-2">
+                <p className="text-sm text-gray-600">或选择一个过渡任务：</p>
+                {currentNudge?.nextEvent && findCompatibleTasks(currentNudge.nextEvent).map(task => (
+                  <Button
+                    key={task.id}
+                    variant="outline"
+                    onClick={() => handleCompatibleTaskSelect(task.id)}
+                    className="w-full"
+                  >
+                    {task.label}
+                  </Button>
+                ))}
+              </div>
+              <DialogClose asChild>
+                <Button variant="ghost" className="w-full">
+                  保持当前安排
+                </Button>
+              </DialogClose>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 添加Overload Dialog */}
+      <Dialog open={showOverloadDialog} onOpenChange={setShowOverloadDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>任务负荷调整</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>该任务是否需要额外的精力消耗？</p>
+            <div className="space-y-2">
               <Button
-                onClick={() => {
-                  // 显示兼容任务
-                  const compatibleTasks = findCompatibleTasks(currentNudge?.nextEvent);
-                  // 实现选择兼容任务的逻辑
+                onClick={() => handleOverloadConfirm(true)}
+                className="w-full"
+              >
+                是，永久调整
+              </Button>
+              <Button
+                onClick={() => handleOverloadConfirm(false)}
+                variant="outline"
+                className="w-full"
+              >
+                仅本次调整
+              </Button>
+              <DialogClose asChild>
+                <Button variant="ghost" className="w-full">
+                  取消
+                </Button>
+              </DialogClose>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
 
 export default SchedulePlanner;
